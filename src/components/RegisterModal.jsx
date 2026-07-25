@@ -56,10 +56,10 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
     setLoading(true);
 
     try {
-      console.log('Registrando usuario:', formData.email);
+      console.log('📝 Registrando usuario:', formData.email);
 
       // 1. Verificar si ya existe en profiles
-      const { data: existingProfile } = await supabase
+      const { data: existingProfile, error: checkError } = await supabase
         .from('profiles')
         .select('email')
         .eq('email', formData.email)
@@ -69,7 +69,7 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
         throw new Error('❌ Este correo ya está registrado. Inicia sesión.');
       }
 
-      // 2. Registrar en Supabase Auth (CON AUTO-CONFIRMACIÓN)
+      // 2. Registrar en Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -92,9 +92,9 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
         throw new Error('❌ No se pudo crear el usuario');
       }
 
-      console.log('Usuario creado en Auth:', authData.user.id);
+      console.log('✅ Usuario creado en Auth:', authData.user.id);
 
-      // 3. Crear perfil en profiles
+      // 3. Crear perfil en profiles (con reintento si falla)
       const newProfile = {
         id: authData.user.id,
         nombres: formData.nombres,
@@ -105,62 +105,75 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
         role: 'participant'
       };
 
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert([newProfile]);
+      let profileError;
+      let attempts = 0;
+      let maxAttempts = 3;
+
+      while (attempts < maxAttempts) {
+        try {
+          const { error } = await supabase
+            .from('profiles')
+            .insert([newProfile]);
+          
+          if (!error) {
+            profileError = null;
+            break;
+          }
+          profileError = error;
+          attempts++;
+          console.log(`Intento ${attempts} falló, reintentando...`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        } catch (e) {
+          profileError = e;
+          attempts++;
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
 
       if (profileError) {
-        console.error('Error creando perfil:', profileError);
+        console.error('Error creando perfil después de reintentos:', profileError);
         // Intentar eliminar el usuario de auth
         try {
           await supabase.auth.admin.deleteUser(authData.user.id);
         } catch (e) {}
-        throw new Error('❌ Error al crear el perfil del usuario');
+        throw new Error('❌ Error al crear el perfil del usuario. Intenta nuevamente.');
       }
 
-      console.log('Perfil creado exitosamente');
+      console.log('✅ Perfil creado exitosamente');
 
-      // 4. 🚀 AUTO-LOGIN: Iniciar sesión automáticamente
-      const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
-        email: formData.email,
-        password: formData.password
-      });
+      // 4. AUTO-LOGIN
+      try {
+        const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
+          email: formData.email,
+          password: formData.password
+        });
 
-      if (loginError) {
-        console.error('Error en auto-login:', loginError);
-        // Si falla el auto-login, igual notificamos que se registró
-        setLoading(false);
-        onClose();
-        alert('✅ ¡Registro exitoso! Por favor inicia sesión.');
-        return;
+        if (!loginError && loginData) {
+          // Obtener el perfil completo
+          const { data: finalProfile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('email', formData.email)
+            .maybeSingle();
+
+          setLoading(false);
+          onClose();
+          onRegisterSuccess(finalProfile || newProfile);
+          alert('✅ ¡Registro exitoso! Has iniciado sesión automáticamente.');
+          return;
+        }
+      } catch (loginErr) {
+        console.error('Auto-login falló:', loginErr);
       }
 
-      // 5. Obtener el perfil completo
-      const { data: finalProfile, error: finalError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('email', formData.email)
-        .maybeSingle();
-
-      if (finalError) {
-        console.error('Error obteniendo perfil final:', finalError);
-        setLoading(false);
-        onClose();
-        alert('✅ ¡Registro exitoso! Por favor inicia sesión.');
-        return;
-      }
-
-      // 6. Éxito total - Usuario registrado y logueado
+      // Si el auto-login falla, igual notificamos éxito
       setLoading(false);
       onClose();
-      
-      // Pasar el perfil al padre para que actualice el estado
-      onRegisterSuccess(finalProfile || newProfile);
-      
-      alert('✅ ¡Registro exitoso! Has iniciado sesión automáticamente.');
+      onRegisterSuccess(newProfile);
+      alert('✅ ¡Registro exitoso! Por favor inicia sesión.');
 
     } catch (error) {
-      console.error('Error en registro:', error);
+      console.error('❌ Error en registro:', error);
       setError(error.message || '❌ Error al registrarte. Intenta nuevamente.');
       setLoading(false);
     }
