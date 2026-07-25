@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <!-- Background -->
+  <rect width="500" height="500" rx="32" fill="#FFFFFF" />
+
+  <!-- Outer Orbit Nodes & Arcs -->
+  <!-- Red Arc Top-Right -->
+  <path d="M 270 90 A 160 160 0 0 1 405 275" fill="none" stroke="#DC2626" stroke-width="12" stroke-linecap="round" />
+  <circle cx="270" cy="90" r="14" fill="#DC2626" />
+  <circle cx="395" cy="165" r="12" fill="#DC2626" />
+  <circle cx="410" cy="225" r="12" fill="#DC2626" />
+  <circle cx="405" cy="285" r="16" fill="#DC2626" />
+
+  <!-- Red Arc Bottom-Right Outer -->
+  <path d="M 335 340 A 160 160 0 0 1 340 345" fill="none" stroke="#DC2626" stroke-width="10" stroke-linecap="round" />
+  <circle cx="340" cy="335" r="16" fill="#DC2626" />
+
+  <!-- Navy Arc Bottom-Left -->
+  <path d="M 230 405 A 160 160 0 0 1 150 280" fill="none" stroke="#0F172A" stroke-width="12" stroke-linecap="round" />
+  <circle cx="235" cy="405" r="14" fill="#0F172A" />
+  <circle cx="145" cy="280" r="16" fill="#0F172A" />
+
+  <!-- Navy Arc Top-Left -->
+  <path d="M 155 200 A 160 160 0 0 1 240 90" fill="none" stroke="#0F172A" stroke-width="10" stroke-linecap="round" />
+  <circle cx="145" cy="180" r="16" fill="#DC2626" />
+  <circle cx="175" cy="130" r="14" fill="#0F172A" />
+  <circle cx="245" cy="90" r="16" fill="#0F172A" />
+
+  <!-- Inner Camera Aperture Circle -->
+  <!-- Navy Arc Left Half -->
+  <path d="M 250 120 A 130 130 0 1 0 260 380" fill="none" stroke="#0F172A" stroke-width="16" stroke-linecap="round" />
+  <!-- Red Arc Right Half -->
+  <path d="M 265 120 A 130 130 0 0 1 265 380" fill="none" stroke="#DC2626" stroke-width="16" stroke-linecap="round" />
+
+  <!-- Camera Aperture Iris Blades (Navy #0F172A) -->
+  <g fill="#0F172A" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round">
+    <path d="M 250 145 L 310 190 L 235 210 Z" />
+    <path d="M 310 190 L 335 270 L 270 240 Z" />
+    <path d="M 335 270 L 290 335 L 255 270 Z" />
+    <path d="M 290 335 L 210 320 L 235 255 Z" />
+    <path d="M 210 320 L 175 250 L 230 240 Z" />
+    <path d="M 175 250 L 225 170 L 250 220 Z" />
+  </g>
+
+  <!-- Brand Typography -->
+  <text x="250" y="460" font-family="'Outfit', 'Plus Jakarta Sans', sans-serif" font-weight="900" font-size="70" text-anchor="middle" letter-spacing="-1">
+    <tspan fill="#0F172A">FOTO</tspan><tspan fill="#DC2626">RED</tspan>
+  </text>
+</svg>
