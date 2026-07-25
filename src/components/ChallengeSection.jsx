@@ -79,14 +79,52 @@ export default function ChallengeSection({ user, onSubmitChallenge, challengeSta
 
   const [submitting, setSubmitting] = useState(false);
   const [submittedSuccess, setSubmittedSuccess] = useState(!!userSubmission);
+  const [localChallengeStatus, setLocalChallengeStatus] = useState(challengeState?.status || 'scheduled');
 
-  const isChallengeReleased = challengeState?.status === 'active';
+  // POLLING: Verificar el estado del reto cada 3 segundos
+  useEffect(() => {
+    const checkChallengeStatus = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('challenge')
+          .select('status')
+          .single();
+        
+        if (error) throw error;
+        if (data && data.status !== localChallengeStatus) {
+          setLocalChallengeStatus(data.status);
+          // Actualizar el estado en el componente padre también
+          if (data.status === 'active') {
+            // Si el reto se activó, recargar para mostrar el timer
+            window.location.reload();
+          }
+        }
+      } catch (error) {
+        console.error('Error verificando estado del reto:', error);
+      }
+    };
+
+    // Verificar inmediatamente
+    checkChallengeStatus();
+
+    // Verificar cada 3 segundos
+    const interval = setInterval(checkChallengeStatus, 3000);
+
+    return () => clearInterval(interval);
+  }, [localChallengeStatus]);
+
+  // Actualizar cuando cambie challengeState desde el padre
+  useEffect(() => {
+    if (challengeState?.status) {
+      setLocalChallengeStatus(challengeState.status);
+    }
+  }, [challengeState]);
 
   useEffect(() => {
-    if (quizCompleted && !submittedSuccess && isChallengeReleased) {
+    if (quizCompleted && !submittedSuccess && localChallengeStatus === 'active') {
       setIsTimerRunning(true);
     }
-  }, [quizCompleted, submittedSuccess, isChallengeReleased]);
+  }, [quizCompleted, submittedSuccess, localChallengeStatus]);
 
   useEffect(() => {
     let timer;
@@ -221,7 +259,7 @@ export default function ChallengeSection({ user, onSubmitChallenge, challengeSta
     );
   }
 
-  if (!isChallengeReleased && user.role !== 'admin' && !submittedSuccess) {
+  if (localChallengeStatus !== 'active' && user.role !== 'admin' && !submittedSuccess) {
     return (
       <div className="py-16 text-center max-w-2xl mx-auto px-4">
         <div className="bg-white p-8 sm:p-12 rounded-3xl space-y-6 border border-amber-200 shadow-md">
@@ -235,8 +273,14 @@ export default function ChallengeSection({ user, onSubmitChallenge, challengeSta
             El Moderador Aún No Ha Iniciado el Reto
           </h2>
           <p className="text-sm text-slate-600 leading-relaxed max-w-lg mx-auto">
-            Hola <strong className="text-slate-900">{user.nombres}</strong>, tu registro está confirmado. El <strong className="text-red-600">Moderador</strong> liberará el reto fotográfico de 25 minutos para todos los participantes registrados. Por favor permanece atento.
+            Hola <strong className="text-slate-900">{user.nombres}</strong>, tu registro está confirmado. El <strong className="text-red-600">Moderador</strong> liberará el reto fotográfico de 25 minutos para todos los participantes registrados. 
           </p>
+          <div className="mt-4 p-3 bg-amber-50 rounded-xl border border-amber-200">
+            <p className="text-xs text-amber-700 flex items-center justify-center gap-2">
+              <span className="animate-pulse">🔄</span>
+              Esperando que el moderador inicie el reto... (actualización automática cada 3 segundos)
+            </p>
+          </div>
         </div>
       </div>
     );

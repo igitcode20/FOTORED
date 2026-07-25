@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, UserPlus, Mail, Lock, BookOpen, CreditCard, User, AlertCircle } from 'lucide-react';
 import Logo from './Logo';
+import { supabase } from '../lib/supabase';
 
 const CAREERS = [
   'Ingeniería en Sistemas',
@@ -33,7 +34,7 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
 
   const isFull = registeredCount >= maxLimit;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
@@ -49,26 +50,62 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
 
     setLoading(true);
 
-    setTimeout(() => {
-      onRegisterSuccess({
-        id: `user-${Date.now()}`,
+    try {
+      // 1. Registrar usuario en Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          data: {
+            nombres: formData.nombres,
+            apellidos: formData.apellidos,
+            carnet: formData.carnet,
+            carrera: formData.carrera
+          }
+        }
+      });
+
+      if (authError) throw authError;
+
+      if (!authData.user) {
+        throw new Error('Error al crear el usuario');
+      }
+
+      // 2. Crear perfil en la tabla profiles
+      const newProfile = {
+        id: authData.user.id,
         nombres: formData.nombres,
         apellidos: formData.apellidos,
         carnet: formData.carnet,
         email: formData.email,
         carrera: formData.carrera,
         role: 'participant'
-      });
+      };
+
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert([newProfile]);
+
+      if (profileError) throw profileError;
+
+      // 3. Éxito - pasar el perfil al padre
+      onRegisterSuccess(newProfile);
       setLoading(false);
       onClose();
-    }, 500);
+      
+      alert('✅ ¡Registro exitoso! Ahora puedes iniciar sesión con tus credenciales.');
+
+    } catch (error) {
+      console.error('Error en registro:', error);
+      setError(error.message || 'Error al registrar. Intenta nuevamente.');
+      setLoading(false);
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="relative w-full max-w-xl bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-2xl overflow-y-auto max-h-[90vh]">
         
-        {/* Close Button */}
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 rounded-full hover:bg-slate-100 transition-colors"
@@ -76,7 +113,6 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
           <X className="w-5 h-5" />
         </button>
 
-        {/* Header */}
         <div className="text-center space-y-2 mb-6">
           <div className="flex justify-center mb-2">
             <Logo size="medium" />
@@ -96,7 +132,6 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
           </div>
         )}
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             
@@ -200,7 +235,7 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
               <input
                 type="password"
                 required
-                placeholder="••••••••"
+                placeholder="Mínimo 6 caracteres"
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:outline-none focus:border-red-600 focus:bg-white"
