@@ -58,7 +58,18 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
     try {
       console.log('Registrando usuario:', formData.email);
 
-      // 1. Registrar en Supabase Auth
+      // 1. Verificar si ya existe en profiles
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('email')
+        .eq('email', formData.email)
+        .maybeSingle();
+
+      if (existingProfile) {
+        throw new Error('❌ Este correo ya está registrado. Inicia sesión.');
+      }
+
+      // 2. Registrar en Supabase Auth (CON AUTO-CONFIRMACIÓN)
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -83,7 +94,7 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
 
       console.log('Usuario creado en Auth:', authData.user.id);
 
-      // 2. Crear perfil en profiles
+      // 3. Crear perfil en profiles
       const newProfile = {
         id: authData.user.id,
         nombres: formData.nombres,
@@ -109,12 +120,44 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
 
       console.log('Perfil creado exitosamente');
 
-      // 3. Éxito
-      onRegisterSuccess(newProfile);
+      // 4. 🚀 AUTO-LOGIN: Iniciar sesión automáticamente
+      const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password
+      });
+
+      if (loginError) {
+        console.error('Error en auto-login:', loginError);
+        // Si falla el auto-login, igual notificamos que se registró
+        setLoading(false);
+        onClose();
+        alert('✅ ¡Registro exitoso! Por favor inicia sesión.');
+        return;
+      }
+
+      // 5. Obtener el perfil completo
+      const { data: finalProfile, error: finalError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('email', formData.email)
+        .maybeSingle();
+
+      if (finalError) {
+        console.error('Error obteniendo perfil final:', finalError);
+        setLoading(false);
+        onClose();
+        alert('✅ ¡Registro exitoso! Por favor inicia sesión.');
+        return;
+      }
+
+      // 6. Éxito total - Usuario registrado y logueado
       setLoading(false);
       onClose();
       
-      alert('✅ ¡Registro exitoso! Ahora puedes iniciar sesión.');
+      // Pasar el perfil al padre para que actualice el estado
+      onRegisterSuccess(finalProfile || newProfile);
+      
+      alert('✅ ¡Registro exitoso! Has iniciado sesión automáticamente.');
 
     } catch (error) {
       console.error('Error en registro:', error);
@@ -143,6 +186,9 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
           </h2>
           <p className="text-xs text-slate-500">
             Reto Fotográfico UNAN Managua CUR Chontales (Cupos: <strong className="text-red-600">{registeredCount}/{maxLimit}</strong>)
+          </p>
+          <p className="text-xs text-emerald-600 font-semibold bg-emerald-50 px-3 py-1 rounded-full inline-block">
+            ✅ Registro e inicio de sesión automático
           </p>
         </div>
 
@@ -279,7 +325,7 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
             ) : (
               <span className="flex items-center gap-2">
                 <UserPlus className="w-4 h-4" />
-                Registrarme (Cupo {registeredCount + 1}/25)
+                Registrarme e Iniciar Sesión
               </span>
             )}
           </button>
