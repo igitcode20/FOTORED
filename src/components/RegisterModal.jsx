@@ -39,19 +39,26 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
     setError('');
 
     if (isFull) {
-      setError('Lo sentimos, se ha alcanzado el límite máximo de 25 participantes.');
+      setError('❌ Límite máximo de 25 participantes alcanzado.');
       return;
     }
 
     if (!formData.nombres || !formData.apellidos || !formData.carnet || !formData.email || !formData.password) {
-      setError('Por favor completa todos los campos requeridos.');
+      setError('❌ Completa todos los campos requeridos.');
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      setError('❌ La contraseña debe tener al menos 6 caracteres.');
       return;
     }
 
     setLoading(true);
 
     try {
-      // 1. Registrar usuario en Supabase Auth
+      console.log('Registrando usuario:', formData.email);
+
+      // 1. Registrar en Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -65,13 +72,18 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
         }
       });
 
-      if (authError) throw authError;
-
-      if (!authData.user) {
-        throw new Error('Error al crear el usuario');
+      if (authError) {
+        console.error('Error de auth:', authError);
+        throw new Error('❌ ' + authError.message);
       }
 
-      // 2. Crear perfil en la tabla profiles
+      if (!authData || !authData.user) {
+        throw new Error('❌ No se pudo crear el usuario');
+      }
+
+      console.log('Usuario creado en Auth:', authData.user.id);
+
+      // 2. Crear perfil en profiles
       const newProfile = {
         id: authData.user.id,
         nombres: formData.nombres,
@@ -86,18 +98,27 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
         .from('profiles')
         .insert([newProfile]);
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        console.error('Error creando perfil:', profileError);
+        // Intentar eliminar el usuario de auth
+        try {
+          await supabase.auth.admin.deleteUser(authData.user.id);
+        } catch (e) {}
+        throw new Error('❌ Error al crear el perfil del usuario');
+      }
 
-      // 3. Éxito - pasar el perfil al padre
+      console.log('Perfil creado exitosamente');
+
+      // 3. Éxito
       onRegisterSuccess(newProfile);
       setLoading(false);
       onClose();
       
-      alert('✅ ¡Registro exitoso! Ahora puedes iniciar sesión con tus credenciales.');
+      alert('✅ ¡Registro exitoso! Ahora puedes iniciar sesión.');
 
     } catch (error) {
       console.error('Error en registro:', error);
-      setError(error.message || 'Error al registrar. Intenta nuevamente.');
+      setError(error.message || '❌ Error al registrarte. Intenta nuevamente.');
       setLoading(false);
     }
   };
@@ -121,12 +142,12 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
             Registro de Participante
           </h2>
           <p className="text-xs text-slate-500">
-            Reto Fotográfico Oficial UNAN-FAREM Chontales (Cupos: <strong className="text-red-600">{registeredCount}/{maxLimit}</strong>)
+            Reto Fotográfico UNAN Managua CUR Chontales (Cupos: <strong className="text-red-600">{registeredCount}/{maxLimit}</strong>)
           </p>
         </div>
 
         {error && (
-          <div className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200 flex items-center gap-3 text-red-600 text-xs font-semibold">
+          <div className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200 flex items-center gap-3 text-red-600 text-sm font-semibold">
             <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
             <span>{error}</span>
           </div>
@@ -134,17 +155,16 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Los 2 Nombres <span className="text-red-600">*</span>
+                Nombres <span className="text-red-600">*</span>
               </label>
               <div className="relative">
                 <User className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
                   required
-                  placeholder="Ej: Juan Carlos"
+                  placeholder="Juan Carlos"
                   value={formData.nombres}
                   onChange={(e) => setFormData({ ...formData, nombres: e.target.value })}
                   className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:outline-none focus:border-red-600 focus:bg-white"
@@ -154,14 +174,14 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
 
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Los 2 Apellidos <span className="text-red-600">*</span>
+                Apellidos <span className="text-red-600">*</span>
               </label>
               <div className="relative">
                 <User className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
                   required
-                  placeholder="Ej: López Pérez"
+                  placeholder="López Pérez"
                   value={formData.apellidos}
                   onChange={(e) => setFormData({ ...formData, apellidos: e.target.value })}
                   className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:outline-none focus:border-red-600 focus:bg-white"
@@ -173,14 +193,14 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Carnet Estudiantil <span className="text-red-600">*</span>
+                Carnet <span className="text-red-600">*</span>
               </label>
               <div className="relative">
                 <CreditCard className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
                   required
-                  placeholder="Ej: 2024-0192U"
+                  placeholder="2024-0192U"
                   value={formData.carnet}
                   onChange={(e) => setFormData({ ...formData, carnet: e.target.value })}
                   className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:outline-none focus:border-red-600 focus:bg-white"
@@ -190,7 +210,7 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
 
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Carrera Universitaria <span className="text-red-600">*</span>
+                Carrera <span className="text-red-600">*</span>
               </label>
               <div className="relative">
                 <BookOpen className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
@@ -200,9 +220,7 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
                   className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:outline-none focus:border-red-600 focus:bg-white"
                 >
                   {CAREERS.map((c, i) => (
-                    <option key={i} value={c}>
-                      {c}
-                    </option>
+                    <option key={i} value={c}>{c}</option>
                   ))}
                 </select>
               </div>
@@ -241,12 +259,13 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
                 className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:outline-none focus:border-red-600 focus:bg-white"
               />
             </div>
+            <p className="text-[10px] text-slate-400 mt-1">La contraseña debe tener al menos 6 caracteres</p>
           </div>
 
           <button
             type="submit"
             disabled={loading || isFull}
-            className={`w-full py-3.5 rounded-2xl font-bold text-sm transition-all shadow-md flex items-center justify-center gap-2 mt-4 cursor-pointer ${
+            className={`w-full py-3.5 rounded-2xl font-bold text-sm transition-all shadow-md flex items-center justify-center gap-2 mt-4 ${
               isFull
                 ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
                 : 'bg-red-600 hover:bg-red-700 text-white shadow-red-600/20 hover:scale-[1.01]'
@@ -260,11 +279,17 @@ export default function RegisterModal({ isOpen, onClose, onRegisterSuccess, regi
             ) : (
               <span className="flex items-center gap-2">
                 <UserPlus className="w-4 h-4" />
-                Completar Registro (Cupo {registeredCount + 1}/25)
+                Registrarme (Cupo {registeredCount + 1}/25)
               </span>
             )}
           </button>
         </form>
+
+        <div className="mt-4 text-center">
+          <p className="text-xs text-slate-500">
+            ¿Ya tienes cuenta? <button onClick={onClose} className="text-red-600 font-bold hover:underline">Iniciar sesión</button>
+          </p>
+        </div>
 
       </div>
     </div>

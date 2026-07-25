@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Mail, Lock, LogIn } from 'lucide-react';
 import Logo from './Logo';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 
 export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
   const [email, setEmail] = useState('');
@@ -17,57 +17,90 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
     setLoading(true);
 
     try {
-      if (!isSupabaseConfigured()) {
-        throw new Error('Supabase no está configurado');
-      }
+      console.log('Intentando login con:', email);
 
-      // Autenticar con Supabase
+      // 1. Intentar autenticar con Supabase
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: email,
         password: password
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        console.error('Error de auth:', authError);
+        throw new Error('❌ Credenciales incorrectas. Verifica tu correo y contraseña.');
+      }
 
-      // Obtener perfil del usuario
-      const { data: profileData, error: profileError } = await supabase
+      if (!authData || !authData.user) {
+        throw new Error('❌ No se pudo autenticar el usuario');
+      }
+
+      console.log('Usuario autenticado:', authData.user.id);
+
+      // 2. Buscar perfil en profiles
+      let { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('email', email)
-        .single();
+        .maybeSingle();
 
-      if (profileError && profileError.code === 'PGRST116') {
-        // Si no existe perfil, crear uno
+      console.log('Perfil encontrado:', profileData);
+
+      // 3. Si no existe perfil, crearlo
+      if (!profileData) {
+        console.log('Creando nuevo perfil...');
+        
+        const isAdmin = email === 'redadmind@gmail.com';
         const newProfile = {
           id: authData.user.id,
           email: email,
-          nombres: email.split('@')[0] || 'Usuario',
-          apellidos: '',
-          carnet: 'PENDIENTE',
-          carrera: 'Estudiante',
-          role: 'participant'
+          nombres: isAdmin ? 'Moderador' : 'Usuario',
+          apellidos: isAdmin ? 'Oficial' : '',
+          carnet: isAdmin ? 'ADMIN-2026' : 'PENDIENTE',
+          carrera: isAdmin ? 'Red de Comunicadores (Moderador & Jurado)' : 'Estudiante',
+          role: isAdmin ? 'admin' : 'participant'
         };
 
-        const { data: insertedProfile, error: insertError } = await supabase
+        const { data: inserted, error: insertError } = await supabase
           .from('profiles')
           .insert([newProfile])
           .select()
-          .single();
+          .maybeSingle();
 
-        if (insertError) throw insertError;
-        onLoginSuccess(insertedProfile);
-      } else if (profileError) {
-        throw profileError;
-      } else {
-        onLoginSuccess(profileData);
+        if (insertError) {
+          console.error('Error insertando perfil:', insertError);
+          // Usar el perfil local como fallback
+          profileData = newProfile;
+        } else {
+          profileData = inserted;
+        }
       }
 
+      // 4. Si es admin, asegurar rol admin
+      if (email === 'redadmind@gmail.com' && profileData.role !== 'admin') {
+        console.log('Actualizando a rol admin...');
+        const { data: updated, error: updateError } = await supabase
+          .from('profiles')
+          .update({ role: 'admin' })
+          .eq('email', email)
+          .select()
+          .maybeSingle();
+
+        if (!updateError && updated) {
+          profileData = updated;
+        } else {
+          profileData.role = 'admin';
+        }
+      }
+
+      // 5. Enviar perfil al padre
+      console.log('Login exitoso:', profileData);
+      onLoginSuccess(profileData);
       setLoading(false);
       onClose();
 
     } catch (error) {
       console.error('Error en login:', error);
-      setError(error.message || 'Error al iniciar sesión');
+      setError(error.message || '❌ Error al iniciar sesión. Intenta nuevamente.');
       setLoading(false);
     }
   };
@@ -91,12 +124,15 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
             Iniciar Sesión
           </h2>
           <p className="text-xs text-slate-500">
-            Ingresa con tu correo y contraseña registrada
+            Ingresa con tu correo y contraseña
+          </p>
+          <p className="text-xs font-semibold text-red-600 bg-red-50 px-3 py-1 rounded-full inline-block">
+            Admin: 
           </p>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-medium">
+          <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm font-medium">
             {error}
           </div>
         )}
@@ -139,7 +175,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm transition-all shadow-md shadow-red-600/20 flex items-center justify-center gap-2 mt-6 cursor-pointer"
+            className="w-full py-3.5 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm transition-all shadow-md shadow-red-600/20 flex items-center justify-center gap-2 mt-6"
           >
             {loading ? (
               <span className="flex items-center gap-2">
@@ -149,11 +185,17 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
             ) : (
               <span className="flex items-center gap-2">
                 <LogIn className="w-4 h-4" />
-                Ingresar a la Plataforma
+                Ingresar
               </span>
             )}
           </button>
         </form>
+
+        <div className="mt-4 text-center">
+          <p className="text-xs text-slate-500">
+            ¿No tienes cuenta? <button onClick={onClose} className="text-red-600 font-bold hover:underline">Regístrate</button>
+          </p>
+        </div>
 
       </div>
     </div>
